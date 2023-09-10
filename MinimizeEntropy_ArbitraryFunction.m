@@ -193,8 +193,7 @@ pmax =  [flips(:)*0+35*pi/180;5*ones(Ntime-1,1) ];
 %f_theta = (@(theta,k,b) diag(k)*theta+b); % the mean of z is a linear function of theta here.
 %b = ones(d_theta,1); % randn(d_theta,1); % some offset 
 %% signal model
-f_theta  = @(theta,x) MIGHQuadHPTofts(theta,x,  problem, myidx,auxvariable);
-
+f_theta  = @(theta,x) MIGHQuadHPTofts(theta,x,  problem, myidx,auxvariable,Nspecies,Ntime);
 % please note: in this special evaluation case we have M = diag(k0),
 % i.e. f_theta = diag(k0)*theta+b. This is how we get the optimization
 % variables in. 
@@ -208,10 +207,12 @@ for idx_n_in = 1:size_N_in
         % call fmincon, treat b as the variables to optimize over
         %OPTIONS = optimoptions('fmincon','Algorithm','interior-point');
         tic; % clocking about 4 minutes execution in two dimensions 
-        [k_fin, fval, exitflag] = fmincon(@(k) DifferentialEntropy_ArbitraryFunction(mu_theta, cov_theta, d_theta, d_z, f_theta, cov_z, N_in(idx_n_in), N_out(idx_n_out), k, N_trials), k0,[],[],[],[],pmin,pmax,[],...
+        Fx = @(k) DifferentialEntropy_ArbitraryFunction(mu_theta, cov_theta, d_theta, d_z, f_theta, cov_z, N_in(idx_n_in), N_out(idx_n_out), k, N_trials)
+        %myobjfun = Fx(k0);%[myobjfun, myobjfun_Der]= Fx(k0)
+        [k_fin, fval, exitflag] = fmincon(Fx , k0,[],[],[],[],pmin,pmax,[],...
         optimset('TolX',tolx,'TolFun',tolfun,'MaxIter', ...
         maxiter,'Display','iter-detailed','Hessian',{'lbfgs',1}, ...
-        'GradObj','on','PlotFcn',{'optimplotfvalconstr', 'optimplotconstrviolation', 'optimplotfirstorderopt' }) ...
+        'GradObj','off','PlotFcn',{'optimplotfvalconstr', 'optimplotconstrviolation', 'optimplotfirstorderopt' }) ...
             );
         toc; 
 %         ent_expected =  0.5*log((2*pi*exp(1))^d_z * det(cov_z)) % in other words the contribution of cov_mu_z is 0 
@@ -220,7 +221,7 @@ for idx_n_in = 1:size_N_in
 end
 
 %function [objfun, objfun_Der]=MIGHQuadHPTofts(theta,xopt,problem,myidx,auxvariable)
-function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,auxvariable)
+function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,auxvariable,Nspecies,Ntime)
    x0= struct();
    x0.kpl = theta(1);
    x0.kve = theta(2);
@@ -241,7 +242,7 @@ function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,auxvariable)
    clear reducedObjective
    clear reducedConstraint 
    [objfun ,mygradient] = problem.objective(Xfull);
-   disp(sprintf('objective %f',MIobjfun ))
+   disp(sprintf('objective %f',objfun ))
    %disp('evaluate constraint')
    initConst = struct();
    disp('compute nonlcon')
