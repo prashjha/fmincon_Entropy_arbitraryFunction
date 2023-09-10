@@ -1,4 +1,4 @@
-function [diff_ent] = DifferentialEntropy_ArbitraryFunction(mu_theta,cov_theta,dim_theta,dim_z,f_theta,cov_z,N_samples_theta,N_samples_z,k,b,N_trials)
+function [diff_ent] = DifferentialEntropy_ArbitraryFunction(mu_theta,cov_theta,dim_theta,dim_z,f_theta,cov_z,N_samples_theta,N_samples_z,k,N_trials)
 % The function explores the calculation of an integral of the form 
 %               H(z) = -\int_Z p(z) \log(p(z)) dz
 % under the condition that p(z) is not itself well-defined, but instead 
@@ -46,11 +46,11 @@ for ii = 1:N_trials
     %% sample from p(theta)
     % theta ~ N(mu_theta, cov_theta)
     theta_i = cov_theta*(randn([dim_theta,N_samples_theta])) + mu_theta*ones([dim_theta, N_samples_theta]); 
-    f_theta_i = f_theta(theta_i,k,b);
+    f_theta_i = f_theta(theta_i,k);
 
     %% sample from p(z|theta)
     theta_for_z = cov_theta*(randn([dim_theta,N_samples_z])) + mu_theta*ones([dim_theta, N_samples_z]); 
-    theta_z_generation =   f_theta(theta_for_z,k,b);  
+    theta_z_generation =   f_theta(theta_for_z,k);  
     z_given_theta = (cov_z*randn([dim_z,N_samples_z]) + theta_z_generation)';
     det_cov_z = det(cov_z); % pre-compute determinant and inverse 
     inv_cov_z = inv(cov_z); 

@@ -43,6 +43,24 @@ statevariable    = optimvar('state',Nspecies,(Ntime-1)*nsubstep+1 ,'LowerBound',
 auxvariable      = optimexpr(      [Nspecies,(Ntime-1)*nsubstep+1 ]);
 stateconstraint  = optimconstr(    [Nspecies,(Ntime-1)*nsubstep+1 ]);
 
+
+%% reference solution
+opts.TolFun = 1e-09;
+opts.TolX = 1e-09;
+opts.Display = 'off';
+params = struct('t0',[t0mean(1);0],'gammaPdfA',[alphamean(1)  ;1],'gammaPdfB',[betamean(1);1],...
+    'scaleFactor',VIF_scale_fact,'T1s',[T1pmean(1),T1lmean(1)],'ExchangeTerms',[0,kplmean(1) ;0,0],...
+    'TRList',TR_list,'PerfusionTerms',[kvemean(1),0],'volumeFractions',ve,...
+    'fitOptions', opts);
+model = HPKinetics.NewMultiPoolTofftsGammaVIF();
+for n = 1:Ntime
+    flips(2,n) = 30*pi/180;
+    flips(1,n) = 20*pi/180;
+end
+params.FaList = flips;
+[t_axis,Mxy,Mz] = model.compile(M0.',params);
+
+
 modelSNR = 20 ; % TODO - FIXME
 signuImage = (max(Mxy(1,:))+max(Mxy(2,:)))/2/modelSNR;
 % walker paper is peak pyruvate only
@@ -71,7 +89,7 @@ auxvariable(:,1) =0;
          % properties of theta
          d_theta = NumberUncertain;               % for now, dim_z = dim_theta
          mu_theta = [kplmean;kvemean ;t0mean  ]; %zeros(d_theta,1); % mean of theta 
-         cov_theta = eye([kplstdd ;kvestdd ;t0stdd  ]);    % this is Cov(P) 
+         cov_theta = diag([kplstdd ;kvestdd ;t0stdd  ]);    % this is Cov(P) 
        %case(4)
        %  T1Pqp   = xn{1}(iqp);
        %  T1Lqp   = xn{2}(iqp);
@@ -131,7 +149,7 @@ auxvariable(:,1) =0;
     end
 
     disp('build objective function')
-    sumstatevariable =  sum(sum(sin(subFaList).*(ve*statevariable  + (1-ve) *jmA0  * [(SubTimeList+t0qp ).^(alphamean-1).* exp(-(SubTimeList+t0qp )/ betamean) /(betamean^alphamean* gamma(alphamean));zeros(1,(Ntime-1)*nsubstep+1)]  ),2));
+    sumstatevariable =  sum(sum(sin(subFaList).*(ve*statevariable  + (1-ve) *VIF_scale_fact(1)  * [(SubTimeList+t0qp ).^(alphamean-1).* exp(-(SubTimeList+t0qp )/ betamean) /(betamean^alphamean* gamma(alphamean));zeros(1,(Ntime-1)*nsubstep+1)]  ),2));
 
     %% 
     % Create an optimization problem using these converted optimization expressions.
@@ -172,10 +190,10 @@ pmax =  [flips(:)*0+35*pi/180;5*ones(Ntime-1,1) ];
 
 % mapping \mu_z = f(theta,k) = \mathcal{G}(theta,k) = Mx + b 
 % Change this function to create custom \mu_z = f(theta)
-f_theta = (@(theta,k,b) diag(k)*theta+b); % the mean of z is a linear function of theta here.
-b = ones(d_theta,1); % randn(d_theta,1); % some offset 
+%f_theta = (@(theta,k,b) diag(k)*theta+b); % the mean of z is a linear function of theta here.
+%b = ones(d_theta,1); % randn(d_theta,1); % some offset 
 %% signal model
-Fx = @(x) MIGHQuadHPTofts(x, problem, myidx,auxvariable);
+f_theta  = @(theta,x) MIGHQuadHPTofts(theta,x,  problem, myidx,auxvariable);
 
 % please note: in this special evaluation case we have M = diag(k0),
 % i.e. f_theta = diag(k0)*theta+b. This is how we get the optimization
@@ -190,7 +208,7 @@ for idx_n_in = 1:size_N_in
         % call fmincon, treat b as the variables to optimize over
         %OPTIONS = optimoptions('fmincon','Algorithm','interior-point');
         tic; % clocking about 4 minutes execution in two dimensions 
-        [k_fin, fval, exitflag] = fmincon(@(k) DifferentialEntropy_ArbitraryFunction(mu_theta, cov_theta, d_theta, d_z, f_theta, cov_z, N_in(idx_n_in), N_out(idx_n_out), k, b, N_trials), k0,[],[],[],[],pmin,pmax,[],...
+        [k_fin, fval, exitflag] = fmincon(@(k) DifferentialEntropy_ArbitraryFunction(mu_theta, cov_theta, d_theta, d_z, f_theta, cov_z, N_in(idx_n_in), N_out(idx_n_out), k, N_trials), k0,[],[],[],[],pmin,pmax,[],...
         optimset('TolX',tolx,'TolFun',tolfun,'MaxIter', ...
         maxiter,'Display','iter-detailed','Hessian',{'lbfgs',1}, ...
         'GradObj','on','PlotFcn',{'optimplotfvalconstr', 'optimplotconstrviolation', 'optimplotfirstorderopt' }) ...
@@ -199,4 +217,51 @@ for idx_n_in = 1:size_N_in
 %         ent_expected =  0.5*log((2*pi*exp(1))^d_z * det(cov_z)) % in other words the contribution of cov_mu_z is 0 
         ent_measured = fval 
     end
+end
+
+%function [objfun, objfun_Der]=MIGHQuadHPTofts(theta,xopt,problem,myidx,auxvariable)
+function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,auxvariable)
+   x0= struct();
+   x0.kpl = theta(1);
+   x0.kve = theta(2);
+   x0.t0  = theta(3);
+   x0.FaList = reshape(xopt(myidx.FaList),Nspecies,Ntime);
+   x0.TR     = xopt(myidx.TR);
+   disp('compute obj')
+   tic
+   x0.state  = evaluate(auxvariable ,x0);
+   toc
+   Xfull = [ x0.FaList(:);x0.TR(:);x0.kpl;x0.kve; x0.state(:);x0.t0];
+   %extraParamscon = functions(problem.nonlcon).workspace{1}.extraParams;
+   %save('extraParams.mat','extraParamscon','Xfull' )
+   % [initConst.ineq,initConst.ceq, initConst.ineqGrad,initConst.ceqGrad] = reducedConstraint(Xinit ,extraParamscon );
+ 
+   
+   % prevent JIT compiler by clearing the functions
+   clear reducedObjective
+   clear reducedConstraint 
+   [objfun ,mygradient] = problem.objective(Xfull);
+   disp(sprintf('objective %f',MIobjfun ))
+   %disp('evaluate constraint')
+   initConst = struct();
+   disp('compute nonlcon')
+   tic;
+   %profile on
+   [initConst.ineq,initConst.ceq, initConst.ineqGrad,initConst.ceqGrad] = problem.nonlcon(Xfull);
+   %clear problem.nonlcon
+   %myprof = profile('info')
+   %save('profiledata','myprof')
+   %profile off
+   toc;
+   %whos
+   %disp('constraint complete')
+   objectiveGradFA    = mygradient(myidx.FaList);
+   objectiveGradTR    = mygradient(myidx.TR);
+   objectiveGradState = mygradient(myidx.state);
+   jacobianFA    = initConst.ceqGrad(myidx.FaList,:);
+   jacobianTR    = initConst.ceqGrad(myidx.TR,:);
+   jacobianState = initConst.ceqGrad(myidx.state,:);
+   adjointvar =-jacobianState \objectiveGradState ;
+   objfun_Der = [objectiveGradFA;objectiveGradTR] +  [jacobianFA;jacobianTR    ] *   adjointvar ;
+   
 end
