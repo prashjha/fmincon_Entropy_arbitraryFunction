@@ -1,0 +1,13 @@
+
+MinimizeEntropy_ArbitraryFunction.m
+	Line 14: dimension of z
+	Line 18: dimension of theta
+	Line 26: initial point for k params 
+	Line 32: custom function g(K,P)
+
+MinimizeRenyiEntropy_ArbitraryFunction.m
+	Line 18: dimension of z
+	Line 22: dimension of theta
+	Line 30: initial point for k params 
+	Line 36: custom function g(K,P)
+
