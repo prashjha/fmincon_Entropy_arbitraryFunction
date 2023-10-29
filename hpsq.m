@@ -205,3 +205,27 @@ for jjj = 1:Ntime-1
 end
 t4 = toc
 handle = figure(1);plot(TR_list, cos(flips(1,:)).* hpstatevariable(1,:) ,'k.-',TR_list, cos(flips(2,:)).* hpstatevariable(2,:) ,'b.-');
+
+
+% remove AD 
+tic
+A = [(-x0.kpl -x0.kve/ve -1/T1Pqp), 0; x0.kpl, -1/T1Lqp ]
+A_inv = [        -1/(x0.kpl + x0.kve/ve + 1/T1Pqp),    0; -(T1Lqp*x0.kpl)/(x0.kpl + x0.kve/ve + 1/T1Pqp), -T1Lqp];
+A_inv_sq = A_inv^2
+noadvar= zeros( Nspecies,(Ntime-1)*nsubstep+1 );
+subFaList = zeros( Nspecies,(Ntime-1)*nsubstep+1 );
+subFaList(:,1:nsubstep:(Ntime-1)*nsubstep+1) = flips ;
+for jjj = 1:Ntime-1
+  subTR = TR /nsubstep;
+  expAsubTR = [ exp(-subTR*(x0.kpl + x0.kve/ve + 1/T1Pqp)),                   0; (x0.kpl*exp(-subTR/T1Lqp) - x0.kpl*exp(-subTR*(x0.kpl + x0.kve/ve + 1/T1Pqp)))/(x0.kpl + x0.kve/ve - 1/T1Lqp + 1/T1Pqp), exp(-subTR/T1Lqp)];
+  for kkk = 1:nsubstep
+    iii = (jjj-1)*nsubstep + kkk;
+    aifterm   = - x0.kve/ve*A_inv*(eye(2) - expAsubTR)*VIF_scale_fact.*[(SubTimeList(iii)+x0.t0 ).^(alphamean-1).* exp(-(SubTimeList(iii)+x0.t0 )/ betamean) /gampdfdenom;0] ...
+              + A_inv_sq*(expAsubTR-(A*subTR)-eye(2))*x0.kve/ve/subTR*VIF_scale_fact.* [(SubTimeList(iii+1)+x0.t0 ).^(alphamean-1).* exp(-(SubTimeList(iii+1)+x0.t0 )/ betamean) /gampdfdenom-(SubTimeList(iii)+x0.t0 ).^(alphamean-1).* exp(-(SubTimeList(iii)+x0.t0 )/ betamean) /gampdfdenom;0];
+    noadvar(:,iii+1) = expAsubTR*(cos(subFaList(:,iii)).*(noadvar(:,iii))) + aifterm          ;
+  end
+end
+t5 = toc
+handle = figure(2);plot(TR_list, cos(flips(1,:)).* noadvar(1,1:nsubstep:(Ntime-1)*nsubstep+1) ,'k--',TR_list, cos(flips(2,:)).* noadvar(2,1:nsubstep:(Ntime-1)*nsubstep+1) ,'b--');
+
+[t1,t2,t3,t4,t5]
