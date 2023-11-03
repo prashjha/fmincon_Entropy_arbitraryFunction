@@ -12,33 +12,25 @@ t1 = toc
 
 
 %% analytic integrals
-syms tau tk tkm1 t0 alphamean betamean kpl kve T1Pqp T1Lqp ve gammaa  jmA0    
-vifone= jmA0/(betamean^alphamean *gammaa)*int( exp(-( kpl+kve/ve+1/T1Pqp )*(tk-tau))*exp( -(tau-t0)/betamean)*(tau - t0) ,tau,tkm1,tk)
-viftwo= jmA0* kpl/(kpl+kve/ve-1/T1Lqp+1/T1Pqp)/(betamean^alphamean *gammaa)*int( (exp(-(tk-tau)/T1Lqp) - exp(-(tk-tau)*(kpl+kve/ve+1/T1Pqp )) )*exp( -(tau-t0)/betamean)*(tau - t0) ,tau,tkm1,tk)
+syms tau tk tkm1 t0mean alphamean betamean kplmean kvemean T1Pqp T1Lqp ve gammaa  jmA0    
+vifone= jmA0/(betamean^alphamean *gammaa)*int( exp(-( kplmean+kvemean/ve+1/T1Pqp )*(tk-tau))*exp( -(tau-t0mean)/betamean)*(tau - t0mean) ,tau,tkm1,tk)
+viftwo= jmA0* kplmean/(kplmean+kvemean/ve-1/T1Lqp+1/T1Pqp)/(betamean^alphamean *gammaa)*int( (exp(-(tk-tau)/T1Lqp) - exp(-(tk-tau)*(kplmean+kvemean/ve+1/T1Pqp )) )*exp( -(tau-t0mean)/betamean)*(tau - t0mean) ,tau,tkm1,tk)
 
 %% Tissue Parameters
 T1pmean = [ 30 ]; % s
-T1pstdd = [ 10 ]; % s
 T1lmean = [ 25 ]; % s
-T1lstdd = [ 10 ]; % s
 kplmean = [ .15 ];       % s
-kplstdd = [ .03 ];       % s
 kvemean = [ 0.05 ];       % s
-kvestdd = [ .01  ];       % s
 t0mean  = [ 0    ];       % s
-t0stdd  = [ 1.3  ] ;       % s
 alphamean  =  [2];
-alphasttd  =  [.3];
 betamean  =  [4.5];
-betasttd  =  [.3];
-tisinput=[T1pmean; T1pstdd; T1lmean; T1lstdd; kplmean; kplstdd; kvemean; kvestdd;t0mean;t0stdd;alphamean; alphasttd; betamean ; betasttd ];
 
 %% Variable Setup
 lnsr2pi = 0.9189385332046727; % log(sqrt(2*pi))
 Ntime = 30;
 TR = 3;
 TR_list = (0:(Ntime-1))*TR;
-nsubstep = 3;
+nsubstep = 7;
 SubTimeList = (0:(Ntime-1)*nsubstep )*TR/nsubstep;
 M0 = [0,0];
 ve = 0.95;
@@ -92,17 +84,6 @@ tic
 t2 = toc
 handle = figure(1);plot(TR_list,Mz(1,:),'k',TR_list,Mz(2,:),'b'); hold on;
 
-modelSNR = 20 ; % TODO - FIXME
-signuImage = (max(Mxy(1,:))+max(Mxy(2,:)))/2/modelSNR;
-% walker paper is peak pyruvate only
-signuImage = max(Mxy(1,:))/modelSNR;
-% variance for Gauss RV is sum. sqrt for std
-signu = sqrt(2* Ntime) * signuImage;
-
-% properties of z 
-d_z = 1; 
-cov_z = signu* eye(d_z); 
-
 
 disp('build state variable')
 stateconstraint(:,1)  = statevariable(:,1) ==0;
@@ -117,17 +98,6 @@ auxvariable(:,1) =0;
          klpqp   =    0 ;     % @cmwalker where do I get this from ? 
          kveqp   = optimvar('kve');
          t0qp    = optimvar('t0');
-         % properties of theta
-         d_theta = NumberUncertain;               % for now, dim_z = dim_theta
-         mu_theta = [kplmean;kvemean ;t0mean  ]; %zeros(d_theta,1); % mean of theta 
-         cov_theta = diag([kplstdd ;kvestdd ;t0stdd  ]);    % this is Cov(P) 
-       %case(4)
-       %  T1Pqp   = xn{1}(iqp);
-       %  T1Lqp   = xn{2}(iqp);
-       %  kplqp   = xn{3}(iqp);
-       %  klpqp   =    0 ;     % @cmwalker where do I get this from ? 
-       %  kveqp   = xn{4}(iqp);
-       %  t0qp    = t0mean(1); 
     end 
 
     % precompute
@@ -167,18 +137,18 @@ auxvariable(:,1) =0;
     %    
     % precompute
     gampdfdenom = (betamean^alphamean* gamma(alphamean));
-    % loop over time
-    for jjj = 1:Ntime-1
-      subTR = TRList(jjj) /nsubstep;
-      expAsubTR = [ exp(-subTR*(kplqp + kveqp/ve + 1/T1Pqp)),                   0; (kplqp*exp(-subTR/T1Lqp) - kplqp*exp(-subTR*(kplqp + kveqp/ve + 1/T1Pqp)))/(kplqp + kveqp/ve - 1/T1Lqp + 1/T1Pqp), exp(-subTR/T1Lqp)];
-      for kkk = 1:nsubstep
-        iii = (jjj-1)*nsubstep + kkk;
-        aifterm   = - kveqp/ve*A_inv*(eye(2) - expAsubTR)*VIF_scale_fact.*[(SubTimeList(iii)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii)+t0qp )/ betamean) /gampdfdenom;0] ...
-                  + A_inv_sq*(expAsubTR-(A*subTR)-eye(2))*kveqp/ve/subTR*VIF_scale_fact.* [(SubTimeList(iii+1)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii+1)+t0qp )/ betamean) /gampdfdenom-(SubTimeList(iii)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii)+t0qp )/ betamean) /gampdfdenom;0];
-        auxvariable(:,iii+1) = expAsubTR*(cos(subFaList(:,iii)).*(auxvariable(:,iii))) + aifterm          ;
-        stateconstraint(:,iii+1) = statevariable(:,iii+1) ==  expAsubTR *(cos(subFaList(:,iii)).*statevariable(:,iii))   + aifterm ;
-      end
-    end
+    %% % loop over time
+    %% for jjj = 1:Ntime-1
+    %%   subTR = TRList(jjj) /nsubstep;
+    %%   expAsubTR = [ exp(-subTR*(kplqp + kveqp/ve + 1/T1Pqp)),                   0; (kplqp*exp(-subTR/T1Lqp) - kplqp*exp(-subTR*(kplqp + kveqp/ve + 1/T1Pqp)))/(kplqp + kveqp/ve - 1/T1Lqp + 1/T1Pqp), exp(-subTR/T1Lqp)];
+    %%   for kkk = 1:nsubstep
+    %%     iii = (jjj-1)*nsubstep + kkk;
+    %%     aifterm   = - kveqp/ve*A_inv*(eye(2) - expAsubTR)*VIF_scale_fact.*[(SubTimeList(iii)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii)+t0qp )/ betamean) /gampdfdenom;0] ...
+    %%               + A_inv_sq*(expAsubTR-(A*subTR)-eye(2))*kveqp/ve/subTR*VIF_scale_fact.* [(SubTimeList(iii+1)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii+1)+t0qp )/ betamean) /gampdfdenom-(SubTimeList(iii)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii)+t0qp )/ betamean) /gampdfdenom;0];
+    %%     auxvariable(:,iii+1) = expAsubTR*(cos(subFaList(:,iii)).*(auxvariable(:,iii))) + aifterm          ;
+    %%     stateconstraint(:,iii+1) = statevariable(:,iii+1) ==  expAsubTR *(cos(subFaList(:,iii)).*statevariable(:,iii))   + aifterm ;
+    %%   end
+    %% end
 
 
 x0.kpl = kplmean ;
@@ -186,10 +156,10 @@ x0.kve = kvemean;
 x0.t0  = t0mean;
 x0.FaList = flips;
 x0.TR     = TR* ones(Ntime-1,1);
-tic
-state  = evaluate(auxvariable ,x0);
-t3 = toc
-handle = figure(1);plot(TR_list, cos(flips(1,:)).* state(1,1:nsubstep:(Ntime-1)*nsubstep+1) ,'k--',TR_list, cos(flips(2,:)).* state(2,1:nsubstep:(Ntime-1)*nsubstep+1) ,'b--');
+%tic
+%state  = evaluate(auxvariable ,x0);
+%t3 = toc
+%handle = figure(1);plot(TR_list, cos(flips(1,:)).* state(1,1:nsubstep:(Ntime-1)*nsubstep+1) ,'k--',TR_list, cos(flips(2,:)).* state(2,1:nsubstep:(Ntime-1)*nsubstep+1) ,'b--');
 
 
 %% use analytic integrals
@@ -198,9 +168,11 @@ tic
 gammaa = gamma(alphamean);
 for jjj = 1:Ntime-1
   expATR = [ exp(-TR*(x0.kpl + x0.kve/ve + 1/T1Pqp)),                   0; (x0.kpl*exp(-TR/T1Lqp) - x0.kpl*exp(-TR*(x0.kpl + x0.kve/ve + 1/T1Pqp)))/(x0.kpl + x0.kve/ve - 1/T1Lqp + 1/T1Pqp), exp(-TR/T1Lqp)];
-  tk   = TR*(jjj+1);
-  tkm1 = TR*jjj;
-  aifterm   =  [ -(jmA0*((T1Pqp^2*betamean^2*ve^2*exp(x0.kpl*tkm1 - x0.kpl*tk - tk/T1Pqp + tkm1/T1Pqp + x0.t0/betamean - tkm1/betamean - (x0.kve*tk)/ve + (x0.kve*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 - (T1Pqp^2*betamean^2*ve^2*exp(x0.t0/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 + (T1Pqp*betamean*x0.t0*ve*exp(x0.t0/betamean)*(exp(-tk/betamean) - exp(-(x0.kve*tk)/ve)*exp((x0.kve*tkm1)/ve)*exp(-x0.kpl*tk)*exp(x0.kpl*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)))/(betamean^alphamean*gammaa); (jmA0*x0.kpl*((T1Pqp^2*betamean^2*ve^2*exp(x0.kpl*tkm1 - x0.kpl*tk - tk/T1Pqp + tkm1/T1Pqp + x0.t0/betamean - tkm1/betamean - (x0.kve*tk)/ve + (x0.kve*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 - (T1Lqp*betamean*exp(x0.t0/betamean)*exp(-tk/betamean)*(T1Lqp*betamean + T1Lqp*tk - betamean*tk))/(T1Lqp - betamean)^2 + (T1Lqp*betamean*x0.t0*exp(x0.t0/betamean)*(exp(-tk/betamean) - exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(-tkm1/betamean)))/(T1Lqp - betamean) - (T1Pqp^2*betamean^2*ve^2*exp(x0.t0/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 + (T1Pqp*betamean*x0.t0*ve*exp(x0.t0/betamean)*(exp(-tk/betamean) - exp(-(x0.kve*tk)/ve)*exp((x0.kve*tkm1)/ve)*exp(-x0.kpl*tk)*exp(x0.kpl*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve) + (T1Lqp*betamean*exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(x0.t0/betamean)*exp(-tkm1/betamean)*(T1Lqp*betamean + T1Lqp*tkm1 - betamean*tkm1))/(T1Lqp - betamean)^2))/(betamean^alphamean*gammaa*(x0.kpl + x0.kve/ve - 1/T1Lqp + 1/T1Pqp)) ];
+  tk   = TR*(jjj  );
+  tkm1 = TR*(jjj-1);
+  %aifterm   =  eval([ vifone;viftwo]);
+  aifterm   =  [ -(jmA0*((T1Pqp^2*betamean^2*ve^2*exp(kplmean*tkm1 - kplmean*tk - tk/T1Pqp + tkm1/T1Pqp + t0mean/betamean - tkm1/betamean - (kvemean*tk)/ve + (kvemean*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)^2 - (T1Pqp^2*betamean^2*ve^2*exp(t0mean/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)^2 + (T1Pqp*betamean*t0mean*ve*exp(t0mean/betamean)*(exp(-tk/betamean) - exp(-(kvemean*tk)/ve)*exp((kvemean*tkm1)/ve)*exp(-kplmean*tk)*exp(kplmean*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)))/(betamean^alphamean*gammaa); (jmA0*kplmean*((T1Pqp^2*betamean^2*ve^2*exp(kplmean*tkm1 - kplmean*tk - tk/T1Pqp + tkm1/T1Pqp + t0mean/betamean - tkm1/betamean - (kvemean*tk)/ve + (kvemean*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)^2 - (T1Lqp*betamean*exp(t0mean/betamean)*exp(-tk/betamean)*(T1Lqp*betamean + T1Lqp*tk - betamean*tk))/(T1Lqp - betamean)^2 + (T1Lqp*betamean*t0mean*exp(t0mean/betamean)*(exp(-tk/betamean) - exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(-tkm1/betamean)))/(T1Lqp - betamean) - (T1Pqp^2*betamean^2*ve^2*exp(t0mean/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)^2 + (T1Pqp*betamean*t0mean*ve*exp(t0mean/betamean)*(exp(-tk/betamean) - exp(-(kvemean*tk)/ve)*exp((kvemean*tkm1)/ve)*exp(-kplmean*tk)*exp(kplmean*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve) + (T1Lqp*betamean*exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(t0mean/betamean)*exp(-tkm1/betamean)*(T1Lqp*betamean + T1Lqp*tkm1 - betamean*tkm1))/(T1Lqp - betamean)^2))/(betamean^alphamean*gammaa*(kplmean + kvemean/ve - 1/T1Lqp + 1/T1Pqp)) ];
+
   hpstatevariable(:,jjj+1) = expATR*(cos(flips(:,jjj)).*(hpstatevariable(:,jjj))) + x0.kve/ve*aifterm ;
 end
 t4 = toc
@@ -226,6 +198,6 @@ for jjj = 1:Ntime-1
   end
 end
 t5 = toc
-handle = figure(2);plot(TR_list, cos(flips(1,:)).* noadvar(1,1:nsubstep:(Ntime-1)*nsubstep+1) ,'k--',TR_list, cos(flips(2,:)).* noadvar(2,1:nsubstep:(Ntime-1)*nsubstep+1) ,'b--');
+handle = figure(1);plot(TR_list, cos(flips(1,:)).* noadvar(1,1:nsubstep:(Ntime-1)*nsubstep+1) ,'k--',TR_list, cos(flips(2,:)).* noadvar(2,1:nsubstep:(Ntime-1)*nsubstep+1) ,'b--');
 
-[t1,t2,t3,t4,t5]
+[t1,t2,t4,t5]
