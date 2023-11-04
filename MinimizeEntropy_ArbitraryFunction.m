@@ -2,6 +2,7 @@
 % some optimization variables 
 clc;
 clear all;
+close all;
 
 %% Tissue Parameters
 T1pmean = [ 30 ]; % s
@@ -14,7 +15,7 @@ kvemean = [ 0.05 ];       % s
 kvestdd = [ .01  ];       % s
 t0mean  = [ 4    ];       % s
 t0stdd  = [ 1.3  ] ;       % s
-alphamean  =  [2.5];
+alphamean  =  [2.0];
 alphasttd  =  [.3];
 betamean  =  [4.5];
 betasttd  =  [.3];
@@ -24,7 +25,7 @@ tisinput=[T1pmean; T1pstdd; T1lmean; T1lstdd; kplmean; kplstdd; kvemean; kvestdd
 lnsr2pi = 0.9189385332046727; % log(sqrt(2*pi))
 Ntime = 30;
 TR = 3;
-TR_list = (0:(Ntime-1))*TR;
+TimeList = (0:(Ntime-1))*TR;
 nsubstep = 3;
 SubTimeList = (0:(Ntime-1)*nsubstep )*TR/nsubstep;
 M0 = [0,0];
@@ -37,11 +38,10 @@ Nspecies = 2
 FaList = optimvar('FaList',Nspecies,Ntime,'LowerBound',0, 'UpperBound',35*pi/180);
 subFaList = optimexpr(      [Nspecies,(Ntime-1)*nsubstep+1 ]);
 subFaList(:,1:nsubstep:(Ntime-1)*nsubstep+1) = FaList ;
-TRList = optimvar('TR',Ntime-1,1,'LowerBound',0, 'UpperBound',5);%TR_list;
+TRList = optimvar('TR',Ntime-1,1,'LowerBound',0, 'UpperBound',5);
 
-statevariable    = optimvar('state',Nspecies,(Ntime-1)*nsubstep+1 ,'LowerBound',0);
-auxvariable      = optimexpr(      [Nspecies,(Ntime-1)*nsubstep+1 ]);
-stateconstraint  = optimconstr(    [Nspecies,(Ntime-1)*nsubstep+1 ]);
+statevariable    = optimvar('state',Nspecies,Ntime ,'LowerBound',0);
+stateconstraint  = optimconstr(    [Nspecies,Ntime ]);
 
 
 %% reference solution
@@ -50,7 +50,7 @@ opts.TolX = 1e-09;
 opts.Display = 'off';
 params = struct('t0',[t0mean(1);0],'gammaPdfA',[alphamean(1)  ;1],'gammaPdfB',[betamean(1);1],...
     'scaleFactor',VIF_scale_fact,'T1s',[T1pmean(1),T1lmean(1)],'ExchangeTerms',[0,kplmean(1) ;0,0],...
-    'TRList',TR_list,'PerfusionTerms',[kvemean(1),0],'volumeFractions',ve,...
+    'TRList',TimeList,'PerfusionTerms',[kvemean(1),0],'volumeFractions',ve,...
     'fitOptions', opts);
 model = HPKinetics.NewMultiPoolTofftsGammaVIF();
 for n = 1:Ntime
@@ -75,7 +75,6 @@ cov_z = signu* eye(d_z);
 
 disp('build state variable')
 stateconstraint(:,1)  = statevariable(:,1) ==0;
-auxvariable(:,1) =0;
 
     NumberUncertain=3;
     switch (NumberUncertain)
@@ -134,22 +133,29 @@ auxvariable(:,1) =0;
     % [                                                              exp(-subTR*(kpl + kveqp + 1/T1P)),                   0]
     % [(kpl*exp(-subTR/T1L) - kpl*exp(-subTR*(kpl + kveqp + 1/T1P)))/(kpl + kveqp - 1/T1L + 1/T1P), exp(-subTR/T1L)]
     %    
-
+    % precompute
+    gammaa = gamma(alphamean);
+    %gampdfdenom = (betamean^alphamean* gamma(alphamean));
     % loop over time
     for jjj = 1:Ntime-1
-      subTR = TRList(jjj) /nsubstep;
-      expAsubTR = [ exp(-subTR*(kplqp + kveqp/ve + 1/T1Pqp)),                   0; (kplqp*exp(-subTR/T1Lqp) - kplqp*exp(-subTR*(kplqp + kveqp/ve + 1/T1Pqp)))/(kplqp + kveqp/ve - 1/T1Lqp + 1/T1Pqp), exp(-subTR/T1Lqp)];
-      for kkk = 1:nsubstep
-        iii = (jjj-1)*nsubstep + kkk;
-        aifterm   = - kveqp/ve*A_inv*(eye(2) - expAsubTR)*VIF_scale_fact.*[(SubTimeList(iii)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii)+t0qp )/ betamean) /(betamean^alphamean* gamma(alphamean));0] ...
-                  + A_inv_sq*(expAsubTR-(A*subTR)-eye(2))*kveqp/ve/subTR*VIF_scale_fact.* [(SubTimeList(iii+1)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii+1)+t0qp )/ betamean) /(betamean^alphamean* gamma(alphamean))-(SubTimeList(iii)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii)+t0qp )/ betamean) /(betamean^alphamean* gamma(alphamean));0];
-        auxvariable(:,iii+1) = expAsubTR*(cos(subFaList(:,iii)).*(auxvariable(:,iii))) + aifterm          ;
-        stateconstraint(:,iii+1) = statevariable(:,iii+1) ==  expAsubTR *(cos(subFaList(:,iii)).*statevariable(:,iii))   + aifterm ;
-      end
+%      subTR = TRList(jjj) /nsubstep;
+%      expAsubTR = [ exp(-subTR*(kplqp + kveqp/ve + 1/T1Pqp)),                   0; (kplqp*exp(-subTR/T1Lqp) - kplqp*exp(-subTR*(kplqp + kveqp/ve + 1/T1Pqp)))/(kplqp + kveqp/ve - 1/T1Lqp + 1/T1Pqp), exp(-subTR/T1Lqp)];
+      expATR = [ exp(-TRList(jjj)*(kplqp + kveqp/ve + 1/T1Pqp)),                   0; (kplqp*exp(-TRList(jjj)/T1Lqp) - kplqp*exp(-TRList(jjj)*(kplqp + kveqp/ve + 1/T1Pqp)))/(kplqp + kveqp/ve - 1/T1Lqp + 1/T1Pqp), exp(-TRList(jjj)/T1Lqp)];
+      tk   = TRList(jjj)*(jjj  );
+      tkm1 = TRList(jjj)*(jjj-1);
+      aifterm   =  [ -(VIF_scale_fact(1)*((T1Pqp^2*betamean^2*ve^2*exp(kplqp*tkm1 - kplqp*tk - tk/T1Pqp + tkm1/T1Pqp + t0qp/betamean - tkm1/betamean - (kveqp*tk)/ve + (kveqp*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve)^2 - (T1Pqp^2*betamean^2*ve^2*exp(t0qp/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve)^2 + (T1Pqp*betamean*t0qp*ve*exp(t0qp/betamean)*(exp(-tk/betamean) - exp(-(kveqp*tk)/ve)*exp((kveqp*tkm1)/ve)*exp(-kplqp*tk)*exp(kplqp*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve)))/(betamean^alphamean*gammaa); (VIF_scale_fact(1)*kplqp*((T1Pqp^2*betamean^2*ve^2*exp(kplqp*tkm1 - kplqp*tk - tk/T1Pqp + tkm1/T1Pqp + t0qp/betamean - tkm1/betamean - (kveqp*tk)/ve + (kveqp*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve)^2 - (T1Lqp*betamean*exp(t0qp/betamean)*exp(-tk/betamean)*(T1Lqp*betamean + T1Lqp*tk - betamean*tk))/(T1Lqp - betamean)^2 + (T1Lqp*betamean*t0qp*exp(t0qp/betamean)*(exp(-tk/betamean) - exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(-tkm1/betamean)))/(T1Lqp - betamean) - (T1Pqp^2*betamean^2*ve^2*exp(t0qp/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve)^2 + (T1Pqp*betamean*t0qp*ve*exp(t0qp/betamean)*(exp(-tk/betamean) - exp(-(kveqp*tk)/ve)*exp((kveqp*tkm1)/ve)*exp(-kplqp*tk)*exp(kplqp*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kveqp + T1Pqp*betamean*kplqp*ve) + (T1Lqp*betamean*exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(t0qp/betamean)*exp(-tkm1/betamean)*(T1Lqp*betamean + T1Lqp*tkm1 - betamean*tkm1))/(T1Lqp - betamean)^2))/(betamean^alphamean*gammaa*(kplqp + kveqp/ve - 1/T1Lqp + 1/T1Pqp)) ];
+      %hpstatevariable(:,jjj+1) = expATR*(cos(flips(:,jjj)).*(hpstatevariable(:,jjj))) + x0.kve/ve*aifterm ;
+      stateconstraint(:,jjj+1) = statevariable(:,jjj+1) ==  expATR *(cos(FaList(:,jjj)).*statevariable(:,jjj))   + kveqp/ve* aifterm ;
+      % for kkk = 1:nsubstep
+      %   iii = (jjj-1)*nsubstep + kkk;
+      %   aifterm   = - kveqp/ve*A_inv*(eye(2) - expAsubTR)*VIF_scale_fact.*[(SubTimeList(iii)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii)+t0qp )/ betamean) /gampdfdenom;0] ...
+      %             + A_inv_sq*(expAsubTR-(A*subTR)-eye(2))*kveqp/ve/subTR*VIF_scale_fact.* [(SubTimeList(iii+1)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii+1)+t0qp )/ betamean) /gampdfdenom-(SubTimeList(iii)+t0qp ).^(alphamean-1).* exp(-(SubTimeList(iii)+t0qp )/ betamean) /gampdfdenom;0];
+      %   stateconstraint(:,iii+1) = statevariable(:,iii+1) ==  expAsubTR *(cos(subFaList(:,iii)).*statevariable(:,iii))   + aifterm ;
+      % end
     end
 
     disp('build objective function')
-    sumstatevariable =  sum(sum(sin(subFaList).*(ve*statevariable  + (1-ve) *VIF_scale_fact(1)  * [(SubTimeList+t0qp ).^(alphamean-1).* exp(-(SubTimeList+t0qp )/ betamean) /(betamean^alphamean* gamma(alphamean));zeros(1,(Ntime-1)*nsubstep+1)]  ),2));
+    sumstatevariable =  sum(sum(sin(FaList).*(ve*statevariable  + (1-ve) *VIF_scale_fact(1)  * [(TimeList+t0qp ).^(alphamean-1).* exp(-(TimeList+t0qp )/ betamean) /(betamean^alphamean* gamma(alphamean));zeros(1,Ntime)]  ),2));
 
     %% 
     % Create an optimization problem using these converted optimization expressions.
@@ -193,7 +199,7 @@ pmax =  [flips(:)*0+35*pi/180;5*ones(Ntime-1,1) ];
 %f_theta = (@(theta,k,b) diag(k)*theta+b); % the mean of z is a linear function of theta here.
 %b = ones(d_theta,1); % randn(d_theta,1); % some offset 
 %% signal model
-f_theta  = @(theta,x) MIGHQuadHPTofts(theta,x,  problem, myidx,auxvariable,Nspecies,Ntime);
+f_theta  = @(theta,x) MIGHQuadHPTofts(theta,x,  problem, myidx,params,Nspecies,Ntime);
 % please note: in this special evaluation case we have M = diag(k0),
 % i.e. f_theta = diag(k0)*theta+b. This is how we get the optimization
 % variables in. 
@@ -220,18 +226,33 @@ for idx_n_in = 1:size_N_in
     end
 end
 
-%function [objfun, objfun_Der]=MIGHQuadHPTofts(theta,xopt,problem,myidx,auxvariable)
-function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,auxvariable,Nspecies,Ntime)
+function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,params,Nspecies,Ntime)
    x0= struct();
    x0.kpl = theta(1);
    x0.kve = theta(2);
    x0.t0  = theta(3);
    x0.FaList = reshape(xopt(myidx.FaList),Nspecies,Ntime);
    x0.TR     = xopt(myidx.TR);
-   disp('compute obj')
+   T1Pqp = params.T1s(1);
+   T1Lqp = params.T1s(2);
+   alphamean = params.gammaPdfA(1);
+   betamean = params.gammaPdfB(1);
+   disp('compute state')
    tic
-   x0.state  = evaluate(auxvariable ,x0);
+   % use analytic integrals
+   x0.state  = zeros(Nspecies,Ntime);
+   gammaa = gamma(alphamean);
+   for jjj = 1:Ntime-1
+     expATR = [ exp(-TR*(x0.kpl + x0.kve/ve + 1/T1Pqp)),                   0; (x0.kpl*exp(-TR/T1Lqp) - x0.kpl*exp(-TR*(x0.kpl + x0.kve/ve + 1/T1Pqp)))/(x0.kpl + x0.kve/ve - 1/T1Lqp + 1/T1Pqp), exp(-TR/T1Lqp)];
+     tk   = sum(TR(1:jjj));
+     tkm1 = sum(TR(1:jjj-1));
+     %aifterm   =  eval([ vifone;viftwo]);
+     aifterm   =  [ -(jmA0*((T1Pqp^2*betamean^2*ve^2*exp(x0.kpl*tkm1 - x0.kpl*tk - tk/T1Pqp + tkm1/T1Pqp + x0.t0/betamean - tkm1/betamean - (x0.kve*tk)/ve + (x0.kve*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 - (T1Pqp^2*betamean^2*ve^2*exp(x0.t0/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 + (T1Pqp*betamean*x0.t0*ve*exp(x0.t0/betamean)*(exp(-tk/betamean) - exp(-(x0.kve*tk)/ve)*exp((x0.kve*tkm1)/ve)*exp(-x0.kpl*tk)*exp(x0.kpl*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)))/(betamean^alphamean*gammaa); (jmA0*x0.kpl*((T1Pqp^2*betamean^2*ve^2*exp(x0.kpl*tkm1 - x0.kpl*tk - tk/T1Pqp + tkm1/T1Pqp + x0.t0/betamean - tkm1/betamean - (x0.kve*tk)/ve + (x0.kve*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 - (T1Lqp*betamean*exp(x0.t0/betamean)*exp(-tk/betamean)*(T1Lqp*betamean + T1Lqp*tk - betamean*tk))/(T1Lqp - betamean)^2 + (T1Lqp*betamean*x0.t0*exp(x0.t0/betamean)*(exp(-tk/betamean) - exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(-tkm1/betamean)))/(T1Lqp - betamean) - (T1Pqp^2*betamean^2*ve^2*exp(x0.t0/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 + (T1Pqp*betamean*x0.t0*ve*exp(x0.t0/betamean)*(exp(-tk/betamean) - exp(-(x0.kve*tk)/ve)*exp((x0.kve*tkm1)/ve)*exp(-x0.kpl*tk)*exp(x0.kpl*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve) + (T1Lqp*betamean*exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(x0.t0/betamean)*exp(-tkm1/betamean)*(T1Lqp*betamean + T1Lqp*tkm1 - betamean*tkm1))/(T1Lqp - betamean)^2))/(betamean^alphamean*gammaa*(x0.kpl + x0.kve/ve - 1/T1Lqp + 1/T1Pqp)) ];
+   
+     x0.state(:,jjj+1) = expATR*(cos(flips(:,jjj)).*(x0.state(:,jjj))) + x0.kve/ve*aifterm ;
+   end
    toc
+   % handle = figure;plot([1:size(x0.state,2)],x0.state(1,:),'k',[1:size(x0.state,2)],x0.state(2,:),'b');saveas(handle,sprintf('state%d',size(x0.state,2)),'png')
    Xfull = [ x0.FaList(:);x0.TR(:);x0.kpl;x0.kve; x0.state(:);x0.t0];
    %extraParamscon = functions(problem.nonlcon).workspace{1}.extraParams;
    %save('extraParams.mat','extraParamscon','Xfull' )
@@ -241,12 +262,12 @@ function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,auxvariable,Nspecies,N
    % prevent JIT compiler by clearing the functions
    clear reducedObjective
    clear reducedConstraint 
+   disp('compute obj/nonlcon')
+   tic;
    [objfun ,mygradient] = problem.objective(Xfull);
    disp(sprintf('objective %f',objfun ))
    %disp('evaluate constraint')
    initConst = struct();
-   disp('compute nonlcon')
-   tic;
    %profile on
    [initConst.ineq,initConst.ceq, initConst.ineqGrad,initConst.ceqGrad] = problem.nonlcon(Xfull);
    %clear problem.nonlcon
