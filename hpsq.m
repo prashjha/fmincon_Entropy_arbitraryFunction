@@ -182,7 +182,14 @@ handle = figure(1);plot(TR_list, cos(flips(1,:)).* hpstatevariable(1,:) ,'k.-',T
 tic
 tk= (1:(Ntime-1))*TR;
 tkm1= (0:(Ntime-2))*TR;
+TRvec = ones(1,Ntime-1)*TR;
 aifterm   =  [ -(jmA0*((T1Pqp^2*betamean^2*ve^2*exp(kplmean*tkm1 - kplmean*tk - tk/T1Pqp + tkm1/T1Pqp + t0mean/betamean - tkm1/betamean - (kvemean*tk)/ve + (kvemean*tkm1)/ve).*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)^2 - (T1Pqp^2*betamean^2*ve^2*exp(t0mean/betamean - tk/betamean).*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)^2 + (T1Pqp*betamean*t0mean*ve*exp(t0mean/betamean)*(exp(-tk/betamean) - exp(-(kvemean*tk)/ve).*exp((kvemean*tkm1)/ve).*exp(-kplmean*tk).*exp(kplmean*tkm1).*exp(-tk/T1Pqp).*exp(tkm1/T1Pqp).*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)))/(betamean^alphamean*gammaa); (jmA0*kplmean*((T1Pqp^2*betamean^2*ve^2*exp(kplmean*tkm1 - kplmean*tk - tk/T1Pqp + tkm1/T1Pqp + t0mean/betamean - tkm1/betamean - (kvemean*tk)/ve + (kvemean*tkm1)/ve).*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve))/(T1Pqp*betamean*ve) - 1)) /(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)^2 - (T1Lqp*betamean*exp(t0mean/betamean)*exp(-tk/betamean).*(T1Lqp*betamean + T1Lqp*tk - betamean*tk))/(T1Lqp - betamean)^2 + (T1Lqp*betamean*t0mean*exp(t0mean/betamean)*(exp(-tk/betamean) - exp(-tk/T1Lqp).*exp(tkm1/T1Lqp).*exp(-tkm1/betamean)))/(T1Lqp - betamean) - (T1Pqp^2*betamean^2*ve^2*exp(t0mean/betamean - tk/betamean).*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve))/(T1Pqp*betamean*ve) - 1)) /(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve)^2 + (T1Pqp*betamean*t0mean*ve*exp(t0mean/betamean)*(exp(-tk/betamean) - exp(-(kvemean*tk)/ve).*exp((kvemean*tkm1)/ve).*exp(-kplmean*tk).*exp(kplmean*tkm1).*exp(-tk/T1Pqp).*exp(tkm1/T1Pqp).*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*kvemean + T1Pqp*betamean*kplmean*ve) + (T1Lqp*betamean*exp(-tk/T1Lqp).*exp(tkm1/T1Lqp).*exp(t0mean/betamean).*exp(-tkm1/betamean).*(T1Lqp*betamean + T1Lqp*tkm1 - betamean*tkm1))/(T1Lqp - betamean)^2))/(betamean^alphamean*gammaa*(kplmean + kvemean/ve - 1/T1Lqp + 1/T1Pqp)) ];
+expATRdiag =  [exp(-TRvec*(x0.kpl + x0.kve/ve + 1/T1Pqp)); exp(-TRvec/T1Lqp)];
+expATRtwoone = [(x0.kpl*exp(-TRvec/T1Lqp) - x0.kpl*exp(-TRvec*(x0.kpl + x0.kve/ve + 1/T1Pqp)))/(x0.kpl + x0.kve/ve - 1/T1Lqp + 1/T1Pqp);zeros(1,Ntime-1)];
+statematrix = spdiags([expATRtwoone(:) expATRdiag(:) ],-1:0,2*(Ntime-1),2*(Ntime-1) );
+opts.LT = true;
+%vecstate = linsolve(statematrix,aifterm(:),opts);
+vecstate = statematrix\aifterm(:);
 t3 = toc
 
 % remove AD 
