@@ -58,6 +58,17 @@ end
 params.FaList = flips;
 [t_axis,Mxy,Mz] = model.compile(M0.',params);
 
+modelSNR = 20 ; % TODO - FIXME
+signuImage = (max(Mxy(1,:))+max(Mxy(2,:)))/2/modelSNR;
+% walker paper is peak pyruvate only
+signuImage = max(Mxy(1,:))/modelSNR;
+% variance for Gauss RV is sum. sqrt for std
+signu = sqrt(2* Ntime) * signuImage;
+
+% properties of z 
+d_z = 1; 
+cov_z = signu* eye(d_z); 
+
 
 disp('build state variable')
 stateconstraint(:,1)  = statevariable(:,1) ==0;
@@ -201,7 +212,7 @@ function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,params,Nspecies,Ntime)
    x0.kpl = theta(1);
    x0.kve = theta(2);
    x0.t0  = theta(3);
-   x0.FaList = reshape(xopt(myidx.FaList),Nspecies);
+   x0.FaList = xopt(myidx.FaList);
    x0.TR     = xopt(myidx.TR);
    T1Pqp = params.T1s(1);
    T1Lqp = params.T1s(2);
@@ -212,6 +223,8 @@ function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,params,Nspecies,Ntime)
    % use analytic integrals
    x0.state  = zeros(Nspecies,Ntime);
    gammaa = gamma(alphamean);
+   ve = params.volumeFractions;
+   jmA0 = params.scaleFactor(1);
    for jjj = 1:Ntime-1
      expATR = [ exp(-x0.TR*(x0.kpl + x0.kve/ve + 1/T1Pqp)),                   0; (x0.kpl*exp(-x0.TR/T1Lqp) - x0.kpl*exp(-x0.TR*(x0.kpl + x0.kve/ve + 1/T1Pqp)))/(x0.kpl + x0.kve/ve - 1/T1Lqp + 1/T1Pqp), exp(-x0.TR/T1Lqp)];
      tk   = x0.TR*jjj;
@@ -219,7 +232,7 @@ function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,params,Nspecies,Ntime)
      %aifterm   =  eval([ vifone;viftwo]);
      aifterm   =  [ -(jmA0*((T1Pqp^2*betamean^2*ve^2*exp(x0.kpl*tkm1 - x0.kpl*tk - tk/T1Pqp + tkm1/T1Pqp + x0.t0/betamean - tkm1/betamean - (x0.kve*tk)/ve + (x0.kve*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 - (T1Pqp^2*betamean^2*ve^2*exp(x0.t0/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 + (T1Pqp*betamean*x0.t0*ve*exp(x0.t0/betamean)*(exp(-tk/betamean) - exp(-(x0.kve*tk)/ve)*exp((x0.kve*tkm1)/ve)*exp(-x0.kpl*tk)*exp(x0.kpl*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)))/(betamean^alphamean*gammaa); (jmA0*x0.kpl*((T1Pqp^2*betamean^2*ve^2*exp(x0.kpl*tkm1 - x0.kpl*tk - tk/T1Pqp + tkm1/T1Pqp + x0.t0/betamean - tkm1/betamean - (x0.kve*tk)/ve + (x0.kve*tkm1)/ve)*((tkm1*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 - (T1Lqp*betamean*exp(x0.t0/betamean)*exp(-tk/betamean)*(T1Lqp*betamean + T1Lqp*tk - betamean*tk))/(T1Lqp - betamean)^2 + (T1Lqp*betamean*x0.t0*exp(x0.t0/betamean)*(exp(-tk/betamean) - exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(-tkm1/betamean)))/(T1Lqp - betamean) - (T1Pqp^2*betamean^2*ve^2*exp(x0.t0/betamean - tk/betamean)*((tk*(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve))/(T1Pqp*betamean*ve) - 1))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve)^2 + (T1Pqp*betamean*x0.t0*ve*exp(x0.t0/betamean)*(exp(-tk/betamean) - exp(-(x0.kve*tk)/ve)*exp((x0.kve*tkm1)/ve)*exp(-x0.kpl*tk)*exp(x0.kpl*tkm1)*exp(-tk/T1Pqp)*exp(tkm1/T1Pqp)*exp(-tkm1/betamean)))/(betamean*ve - T1Pqp*ve + T1Pqp*betamean*x0.kve + T1Pqp*betamean*x0.kpl*ve) + (T1Lqp*betamean*exp(-tk/T1Lqp)*exp(tkm1/T1Lqp)*exp(x0.t0/betamean)*exp(-tkm1/betamean)*(T1Lqp*betamean + T1Lqp*tkm1 - betamean*tkm1))/(T1Lqp - betamean)^2))/(betamean^alphamean*gammaa*(x0.kpl + x0.kve/ve - 1/T1Lqp + 1/T1Pqp)) ];
    
-     x0.state(:,jjj+1) = expATR*(cos(flips(:,jjj)).*(x0.state(:,jjj))) + x0.kve/ve*aifterm ;
+     x0.state(:,jjj+1) = expATR*(cos(x0.FaList).*(x0.state(:,jjj))) + x0.kve/ve*aifterm ;
    end
    toc
    % handle = figure;plot([1:size(x0.state,2)],x0.state(1,:),'k',[1:size(x0.state,2)],x0.state(2,:),'b');saveas(handle,sprintf('state%d',size(x0.state,2)),'png')
