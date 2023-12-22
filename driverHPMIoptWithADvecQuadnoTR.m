@@ -12,7 +12,7 @@ myoptions.Algorithm = 'constDirect'
 %% % monitor memory: while [ -e /proc/3291925 ] ; do  top -b -n 1 -p 3291925 >>process.txt ;sleep 60; done  
 
 %function driverHPMIopt(NGauss,NumberUncertain,modelSNR,myoptions,ObjectiveType,GaussLegendre )
-  NGauss = 1,NumberUncertain=3,modelSNR=10, ObjectiveType = 'TotalSignal',GaussLegendre=false
+  NGauss = 2,NumberUncertain=3,modelSNR=10, ObjectiveType = 'TotalSignal',GaussLegendre=false
 
   NGauss,NumberUncertain,modelSNR,myoptions.Algorithm,ObjectiveType,GaussLegendre
   close all
