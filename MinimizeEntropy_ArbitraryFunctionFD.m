@@ -26,6 +26,8 @@ lnsr2pi = 0.9189385332046727; % log(sqrt(2*pi))
 Ntime = 30;
 TR = 3;
 TimeList = (0:(Ntime-1))*TR;
+nsubstep = 3;
+SubTimeList = (0:(Ntime-1)*nsubstep )*TR/nsubstep;
 M0 = [0,0];
 ve = 0.95;
 %ve = 1.;
@@ -88,6 +90,22 @@ stateconstraint(:,1)  = statevariable(:,1) ==0;
 
     % precompute
     A = [(-kplqp -kveqp/ve -1/T1Pqp), 0; kplqp, -1/T1Lqp ]
+    % syms a  kpl d subTR    T1P kveqp T1L 
+    % A_inv = inv([a,  0; kpl, d ])
+    % 
+    % A_inv =
+    % 
+    % [       1/a,   0]
+    % [-kpl/(a*d), 1/d]
+    % >> a = -1/T1P - kpl - kveqp/ve
+    % >> d = -1/T1L
+    % >> eval(A_inv )
+    %    ans =
+    %    
+    %    [        -1/(kpl + kveqp/ve + 1/T1P),    0]
+    %    [-(T1L*kpl)/(kpl + kveqp/ve + 1/T1P), -T1L]
+    A_inv = [        -1/(kplqp + kveqp/ve + 1/T1Pqp),    0; -(T1Lqp*kplqp)/(kplqp + kveqp/ve + 1/T1Pqp), -T1Lqp];
+    A_inv_sq = A_inv^2
     % >> syms a  kpl d subTR    T1P kveqp T1L 
     % >> expATR = expm([a,  0; kpl, d ] * subTR )
     % 
@@ -146,9 +164,9 @@ N_trials = 1;
 
 % optimization variables
 %k0 = randn(d_theta,1); % we make k which will set the diagonal transformation M = diag(k)
-k0   =  [20*pi/180;30*pi/180;3 ];   
-pmin =  [ 0 , 0 ,0   ];     
-pmax =  [35*pi/180;35*pi/180;5 ];
+k0 =  [flips(:);TR* ones(Ntime-1,1) ];   
+pmin =  [flips(:)*0;zeros(Ntime-1,1)   ];     
+pmax =  [flips(:)*0+35*pi/180;5*ones(Ntime-1,1) ];
                        % in this particular case only, it happens to be
                        % same dim as theta. 
 
@@ -181,7 +199,7 @@ for idx_n_in = 1:size_N_in
         [k_fin, fval, exitflag] = fmincon(Fx , k0,[],[],[],[],pmin,pmax,[],...
         optimset('TolX',tolx,'TolFun',tolfun,'MaxIter', ...
         maxiter,'Display','iter-detailed','Hessian',{'lbfgs',1}, ...
-        'PlotFcn',{'optimplotfvalconstr', 'optimplotconstrviolation', 'optimplotfirstorderopt' }) ...
+        'GradObj','off','PlotFcn',{'optimplotfvalconstr', 'optimplotconstrviolation', 'optimplotfirstorderopt' }) ...
             );
         toc; 
 %         ent_expected =  0.5*log((2*pi*exp(1))^d_z * det(cov_z)) % in other words the contribution of cov_mu_z is 0 
@@ -195,7 +213,7 @@ function objfun =MIGHQuadHPTofts(theta,xopt,problem,myidx,params,Nspecies,Ntime)
    x0.kve = theta(2);
    x0.t0  = theta(3);
    x0.FaList = xopt(myidx.FaList);
-   x0.TR     = xopt(myidx.TR)
+   x0.TR     = xopt(myidx.TR);
    T1Pqp = params.T1s(1);
    T1Lqp = params.T1s(2);
    alphamean = params.gammaPdfA(1);
